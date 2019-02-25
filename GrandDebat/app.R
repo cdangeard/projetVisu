@@ -22,7 +22,7 @@ library(leaflet)
 library(leaflet.extras)
 
 #RECASTING
-donnee <- read.csv(file = 'EVENTS.csv',encoding = 'utf-8',fileEncoding = 'utf-8',colClasses = c('character','character',rep('character',4),'character','numeric','numeric',rep('character',5),'factor','character'))
+donnee <- read.csv(file = 'EVENTS2.csv',encoding = 'utf-8',fileEncoding = 'utf-8',colClasses = c('character','character',rep('character',4),'character','numeric','numeric',rep('character',5),'factor','character'))
 donnee$startAt <- as.POSIXct(strptime(donnee$startAt,format = '%Y-%m-%d %H:%M:%S'))
 donnee$endAt <- as.POSIXct(strptime(donnee$endAt,format = '%Y-%m-%d %H:%M:%S'))
 donnee$createdAt <- as.POSIXct(strptime(donnee$createdAt,format = '%Y-%m-%d %H:%M:%S'))
@@ -87,8 +87,8 @@ for(i in 1:length(fr1$lon)){
     colD[i]<-nomD[j]
   }
 }
-depNamed <- fr1 %>% mutate(nom = colD, mergeName = tolower(gsub("\\:.*","",colD)))
-countMeetingDept$nom <- tolower(gsub("'", "",gsub("[ôö]", "o",gsub("[éèëê]", "e", as.character(countMeetingDept$Var1)))))
+depNamed <- fr1 %>% mutate(nom = colD, mergeName = tolower(gsub("-", " ",gsub("\\:.*","",colD))))
+countMeetingDept$nom <- tolower(gsub("-", " ",gsub("'", "",gsub("[ôö]", "o",gsub("[éèëê]", "e", as.character(countMeetingDept$Var1))))))
 #countMeetingDept$Var1 <- NULL
 MeetingPerDept <- depNamed %>% left_join(countMeetingDept, by=c("mergeName" ="nom"))
 
@@ -180,11 +180,15 @@ ui <- dashboardPage(
                      ),radioButtons(inputId = 'decoupage',NULL,c('Régions','Départements'))
                      ),
     conditionalPanel("input.menu2 == 'carto' && input.cartes == '1'",
+                     radioButtons(inputId = 'zone',NULL,c('France','Europe')),
+                     selectInput('authorType',label = "type d'auteurs",choice=c('all',levels(donnee$authorType))),
                      colourInput(
                        inputId = "colorPointMap1",
                        label = "Couleurs :",
                        value = "#A5DF00"
-                     ),colourInput(
+                     ),
+                     conditionalPanel("input.authorType=='all'",
+                      colourInput(
                        inputId = "colorPointMap2",
                        label = NULL,
                        value = "#FF0000"
@@ -201,7 +205,7 @@ ui <- dashboardPage(
                        label = NULL,
                        value = "#A901DB"
                      )
-                     ),
+                     )),
     
     sidebarMenu(id='menu3',
                 menuItem("Trouve un débat",tabName = "find",icon = icon("map-marker"))
@@ -232,7 +236,8 @@ ui <- dashboardPage(
                                                     plotOutput("barAuteurs"),
                                                     downloadButton(outputId = "plotDL", label = "Download Graph")),
                                            tabPanel('Durée des réunions',value = '2', amChartsOutput("Histduree")),
-                                           tabPanel('Début des réunions',value = '3', amChartsOutput("Histdebut"))
+                                           tabPanel('Début des réunions',value = '3', amChartsOutput("Histdebut")),
+                                           tabPanel('Jours des réunions',value = '4', amChartsOutput("barDayOfW"))
                                )
                               )
                               )
@@ -290,8 +295,11 @@ server <- function(input, output, session) {
   
   ###histograme durées de réunion  ###############################################
   output$Histduree <- renderAmCharts({
+    
     x <- dataHistduree()
-    bins <- round(seq(min(x)-0.5, max(x)+0.5, length.out = input$bins + 1), 2)
+    x <- x[x<10]
+    
+    bins <- round(seq(min(x), max(x), length.out = input$bins + 1), 2)
     
     amHist(x=x, control_hist = list(breaks = bins),
            border= "black",col = input$color, main = input$histName,
@@ -301,26 +309,46 @@ server <- function(input, output, session) {
   ###histograme début de réunion    ###############################################
   output$Histdebut <- renderAmCharts({
     x <- dataHistdebut()
-    bins <- round(seq(min(x)-0.5, max(x)+0.5, length.out = 15), 2)
+    bins <- round(seq(min(x), max(x), length.out = 15), 2)
     
     amHist(x=x, control_hist = list(breaks = bins),
            border= "black",col = input$color2, main = 'Répartition des horaires de réunions',
            export = TRUE, zoom = TRUE, xlab = "",freq = F)
   })
 
+  output$barDayOfW <- renderAmCharts(
+    {
+      days <- as.factor(strftime(donnee$startAt,format = '%A'))
+      days = as.data.frame(table(days))
+      dayOfW <-  data.frame(name=c('lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'),num=1:7)
+      days %<>% left_join(dayOfW, by=c("days" ="name"))
+      days %<>% arrange(num)
+      days$perc = days$Freq/sum(days$Freq)
+      amBarplot(data=days, x= 'days', y='Freq')
+    }
+  )
+  
   #################################################################################
   ######################## ONGLET 3 ###############################################
   
-  output$cartePoints <- renderPlot({  
-    donnee %>% filter(lat >30,10 >lng, lng > -20) %>% ggplot()+aes(x=lng,y=lat)+ coord_fixed(ratio = 1.4) + geom_point(aes(colour=authorType))+
-      scale_color_manual(values = c(input$colorPointMap1,input$colorPointMap2,input$colorPointMap3,input$colorPointMap4,input$colorPointMap5))+
-      geom_path(data = fr1,aes(y=lat,x=lon)) + theme_void() 
+  output$cartePoints <- renderPlot({
+      x<-donnee
+      if(input$zone == 'France'){
+        zone <- c(left = -5, bottom = 42, right = 8, top = 51.5)
+      }else{
+        zone <- c(left = -12, bottom = 35, right = 30, top = 63)
+      }
+      if(input$authorType!='all'){
+        x %<>% filter(authorType==input$authorType)
+      }
+      get_stamenmap(zone, zoom = 5,"toner-lite") %>% ggmap() + geom_point(data = x,aes(x=lng,y=lat,colour=authorType)) + theme_void()+
+      scale_color_manual(values = c(input$colorPointMap1,input$colorPointMap2,input$colorPointMap3,input$colorPointMap4,input$colorPointMap5))
   })
   
   output$carteDensite <- renderPlot({
      if(input$decoupage =='Départements'){
-     ggplot(MeetingPerDept)+aes(y=lat,x=lon,fill=Freq,group=nom)+ coord_fixed(ratio = 1.4)+ geom_polygon(color='black',size=0.7) +
-     scale_fill_continuous(low = input$colorMap1, high = input$colorMap2)+theme_void()
+       ggplot(MeetingPerDept)+aes(y=lat,x=lon,fill=Freq,group=nom)+ coord_fixed(ratio = 1.4)+ geom_polygon(color='black',size=0.7) +
+         scale_fill_continuous(low = input$colorMap1, high = input$colorMap2)+theme_void()
      }else{
        ggplot(regionCount)+aes(long,lat,fill=Freq,group=nom)+ coord_fixed(ratio = 1.4)+ geom_polygon(color='black',size=0.7) +
          scale_fill_continuous(low = input$colorMap1, high = input$colorMap2)+theme_void()

@@ -1,6 +1,6 @@
 #import
 setwd(dir = 'D:/projetVisu/')
-donnee <- read.csv('EVENTS.csv',encoding = 'utf-8',fileEncoding = 'utf-8',colClasses = c('character','character',rep('character',4),'character','numeric','numeric',rep('character',5),'factor','character'))
+donnee <- read.csv('EVENTS2.csv',encoding = 'utf-8',fileEncoding = 'utf-8',colClasses = c('character','character',rep('character',4),'character','numeric','numeric',rep('character',5),'factor','character'))
 str(donnee)
 
 
@@ -22,16 +22,17 @@ donnee$endAt <- as.POSIXct(strptime(donnee$endAt,format = '%Y-%m-%d %H:%M:%S'))
 donnee$createdAt <- as.POSIXct(strptime(donnee$createdAt,format = '%Y-%m-%d %H:%M:%S'))
 donnee$updatedAt <- as.POSIXct(strptime(donnee$updatedAt,format = '%Y-%m-%d %H:%M:%S'))
 
-
 #
 str(donnee)
 summary(donnee)
 #type d'auteur
 ggplot(donnee)+aes(x=authorType,fill=authorType) + geom_bar() + theme_light() + theme(axis.text = element_blank())
 #durée des meetings
-amHist(as.numeric(donnee$endAt-donnee$startAt)/3600,bre)
+amHist(as.numeric(donnee$endAt-donnee$startAt)/3600)
 #heure de début des meetings
-amHist(as.numeric(as.ITime(donnee$startAt)/3600),bin)
+amHist(as.numeric(as.ITime(donnee$startAt)/3600))
+
+c('all',levels(donnee$authorType))
 
 
 #################################
@@ -39,7 +40,11 @@ amHist(as.numeric(as.ITime(donnee$startAt)/3600),bin)
 france <- map(database="france")
 fr1 <- tibble(lon=france$x,lat=france$y)
 donnee %>% filter(lat >30,10 >lng, lng > -20) %>% ggplot()+aes(x=lng,y=lat)+ coord_fixed(ratio = 1.4) + geom_point(aes(colour=authorType))+ 
-  geom_path(data = fr1,aes(y=lat,x=lon)) + theme_void()
+  geom_path(data = fr1,aes(y=lat,x=lon))
+
+europe <- c(left = -5, bottom = 42, right = 8, top = 51.5)
+get_stamenmap(europe, zoom = 5,"toner-lite") %>% ggmap() + geom_point(data = donnee,aes(x=lng,y=lat,colour=authorType))
+
 
 meetingsLoc <- donnee %>% dplyr::select(lng,lat) %>% na.omit
 
@@ -147,4 +152,10 @@ pulseIconList()
 notpassed <- donnee %>% filter(startAt>Sys.Date())
 notpassed$startAt
 
-as.Date()
+days <- as.factor(strftime(donnee$startAt,format = '%A'))
+days = as.data.frame(table(days))
+dayOfW <-  data.frame(name=c('lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'),num=1:7)
+days %<>% left_join(dayOfW, by=c("days" ="name"))
+days %<>% arrange(num)
+amBarplot(data=days, x= 'days', y='Freq')
+
