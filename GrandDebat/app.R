@@ -20,8 +20,10 @@ library(raster)
 library(magrittr)
 library(leaflet)
 library(leaflet.extras)
+library(ggmap)
 
 #RECASTING
+#donnee <- read.csv(url('https://www.data.gouv.fr/fr/datasets/r/f279f254-576f-490d-9a83-047c2b71dbea'))
 donnee <- read.csv(file = 'EVENTS2.csv',encoding = 'utf-8',fileEncoding = 'utf-8',colClasses = c('character','character',rep('character',4),'character','numeric','numeric',rep('character',5),'factor','character'))
 donnee$startAt <- as.POSIXct(strptime(donnee$startAt,format = '%Y-%m-%d %H:%M:%S'))
 donnee$endAt <- as.POSIXct(strptime(donnee$endAt,format = '%Y-%m-%d %H:%M:%S'))
